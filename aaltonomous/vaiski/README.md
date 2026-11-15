@@ -79,7 +79,7 @@ What we don't know:
   simulator's) the brain corrects the camera. With a sagging arm it assumes the real robot: it moves the counter, and
   for the boxes it goes by the size of the shift and switches after two empty grasps. Those branches have never run
   in the simulator.
-- Time. Half the episodes finish within 59 seconds. 5 of 112 ran out of the 120 seconds with a block left, and the real robot may be slower, so expect a block left on the counter in some real episodes.
+- Time. Half the episodes finish within 59 seconds. 5 of 112 ran out of the 120 seconds, and the real robot may be slower, so expect a block left behind in some real episodes.
 
 ## Run it
 
