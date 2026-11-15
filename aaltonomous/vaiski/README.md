@@ -56,7 +56,7 @@ In the organisers' simulator with the Docker image, blocks that ended in the rig
 Seeds: fixed task 400 to 415, example sentences 420 to 427 and 620 to 627, unseen sentences 820 to 851, shape rule 420 to 427,
 lying prisms 500 to 507. The two doubled lines use the seeds of the first two lines.
 
-In the simulator no block ended in a wrong box. The text test below says about 3 in 100 unseen sentences would send one there. Across all 112 episodes 16 of 458 blocks were lost, and all of them stayed on the counter. 9 were prisms, most of them near the middle of the counter: the grip slips or closes on air, and the robot tries the same grip again until there is no time for another try. 
+No block ended in a wrong box in these 112 episodes. The text test below says to expect one for about 3 in 100 unseen sentences. 16 of 458 blocks were left on the counter. 10 of them the robot never got off it: the hand closed on air or the block slipped out. 8 of those were prisms near the middle of the counter. It repeated the same grip until it gave up after eight or nine tries or time ran out. 5 more were dropped on the way to a box and ended where the robot could not see or reach them. For the last one it found no way to get the arm there.
 
 The organisers' gate: 0 clipped steps and 68 to 91 Hz where 27 is required. The container answers 1.1 s after it starts, on a
 CPU, without a network.
@@ -79,7 +79,7 @@ What we don't know:
   simulator's) the brain corrects the camera. With a sagging arm it assumes the real robot: it moves the counter, and
   for the boxes it goes by the size of the shift and switches after two empty grasps. Those branches have never run
   in the simulator.
-- Time. Half the episodes finish within 59 seconds, but 5 of 112 ran out of the 120 seconds with a block left, and the real robot may be slower. Expect a block left on the counter in some real episodes.
+- Time. Half the episodes finish within 59 seconds. 5 of 112 ran out of the 120 seconds with a block left, and the real robot may be slower, so expect a block left on the counter in some real episodes.
 
 ## Run it
 
