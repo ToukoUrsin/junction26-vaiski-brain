@@ -56,7 +56,7 @@ In the organisers' simulator with the Docker image, blocks that ended in the rig
 Seeds: fixed task 400 to 415, example sentences 420 to 427 and 620 to 627, unseen sentences 820 to 851, shape rule 420 to 427,
 lying prisms 500 to 507. The two doubled lines use the seeds of the first two lines.
 
-No block ended in a wrong box in these 112 episodes. The text test below says to expect one for about 3 in 100 unseen sentences. 16 of 458 blocks were left on the counter. 10 of them the robot never got off it: the hand closed on air or the block slipped out. 8 of those were prisms near the middle of the counter. It repeated the same grip until it gave up after eight or nine tries or time ran out. 5 more were dropped on the way to a box and ended where the robot could not see or reach them. For the last one it found no way to get the arm there.
+No block ended in a wrong box in these 112 episodes. By the text test below, about 3 in 100 unseen sentences would cause one. 16 of 458 blocks never reached a box. 10 it never lifted: the hand closed on air or the block slipped out. 8 of those were prisms near the middle of the counter. It repeated the same grip until it gave up after eight or nine tries or time ran out. Changing the grip after a miss is the fix we ran out of time for. 5 more were dropped on the way and ended out of sight or reach. The last one it could not reach at all.
 
 The organisers' gate: 0 clipped steps and 68 to 91 Hz where 27 is required. The container answers 1.1 s after it starts, on a
 CPU, without a network.
