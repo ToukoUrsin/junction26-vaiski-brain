@@ -157,6 +157,8 @@ adaptive:                     # Vaiski additions (defaults live in the code; lis
   sag_on: 0.0045              # rad/Nm; below this nothing changes (sim: 0.0031, max 0.0039 in 158 looks)
   sag_full: 0.007             # rad/Nm; from here the full correction (c - sag_ref) * gravity torque; fades in between (real kp 80 -> 0.0125)
   sag_ref: 0.0032             # rad/Nm; the sim's own compliance, which the grasp tuning already contains
+  sag_low_on: 0.0022          # rad/Nm; an arm stiffer than this is commanded LOWER by (c - sag_ref) * gravity torque (real robot with
+  sag_low_full: 0.0012        #   gravity feed-forward: ~0); fades in down to sag_low_full. 0 0 = off
   sag_cmax: 0.02              # rad/Nm; cap on the estimate
   sag_max: 0.07               # rad; cap on the correction per joint
   sag_min_torque: 1.0         # Nm; joints with less gravity torque at rest are not used for the estimate

@@ -23,8 +23,8 @@ work on top.
 The arm planner and the pinch (thumb against one finger) are the organisers'. We changed three things in their
 planner, each off unless our brain turns it on:
 
-- `kinematics.gravity()` and `planner.sag_delta()`: command the arm a little higher when it is measured to hang
-  under its own weight.
+- `kinematics.gravity()` and `planner.sag_delta()`: command the arm a little higher or lower when it is measured to
+  hang more or less under its own weight than the simulator's.
 - `planner._transit()`: a free move may go over a raised midpoint when the straight path dips towards the counter.
 - `planner.deadline` / `cancel`: a plan search stops when its time is spent or a new episode starts.
 
@@ -56,6 +56,10 @@ In the organisers' simulator with the Docker image, blocks that ended in the rig
 Seeds: fixed task 400 to 415, example sentences 420 to 427 and 620 to 627, unseen sentences 820 to 851, shape rule 420 to 427,
 lying prisms 500 to 507. The two doubled lines use the seeds of the first two lines.
 
+These numbers are from image v12. The image we hand in is v13: v12 plus one rule for an arm that hangs less than the
+simulator's (see "The arm's weight" below). In the simulator the rule stays off. On the fixed task, seeds 400 to 407,
+v13 logged "no compensation" in every episode and sorted 35 of 35, as v12 did.
+
 No block ended in a wrong box in these 112 episodes. By the text test below, about 3 in 100 unseen sentences would cause one. 16 of 458 blocks never reached a box. 10 it never lifted: the hand closed on air or the block slipped out. 8 of those were prisms near the middle of the counter. It repeated the same grip until it gave up after eight or nine tries or time ran out. Changing the grip after a miss is the fix we ran out of time for. 5 more were dropped on the way and ended out of sight or reach. The last one it could not reach at all.
 
 The organisers' gate: 0 clipped steps and 68 to 91 Hz where 27 is required. The container answers 1.1 s after it starts, on a
@@ -71,14 +75,21 @@ What we don't know:
 - It has not touched a real block. The organisers' real recordings have no depth image and no labels, so on real data
   we could only count how often each colour is reported: red and yellow in about 3 of 4 of 1,752 frames, blue in 9 of
   10.
-- The sagging arm. The organisers' code says the real arm sags under its weight (`interface/check_safety_real.py`),
-  which we work out to about 2 cm at the hand. The brain measures the gap between commanded and measured joints at
-  every look and corrects for it. The simulator's arm is four times stiffer, so this has only run in our mock world.
+- The arm's weight. The simulator's arm hangs a little under its own weight (3.4 mrad per Nm, 0.5 to 1.5 cm at the
+  hand), and every grip was tuned with that. With no gravity compensation the real arm hangs lower
+  (`interface/check_safety_real.py`), which we work out to about 2 cm at the hand. On 15.11. the organisers switched
+  gravity feed-forward on by default in the runner, so the real arm should hang less than the simulator's, and the
+  hand would end up to 1.5 cm above where the grip was tuned. The brain measures the gap between commanded and
+  measured joints at every look and corrects both ways: higher for a softer arm, and since v13 lower for a stiffer
+  one (`sag_low_on` in `config.yaml`). The softer case has only run in our mock world. For the stiffer case we
+  switched gravity off for the robot in the simulator, which is what perfect compensation looks like. On the fixed
+  task, seeds 400 to 405, v12 closed on air 6 times and sorted 26 of 27 blocks. v13 never closed on air and sorted 27
+  of 27. Six episodes is a small sample, and the real arm is not the simulator's.
 - Camera, counter or boxes. When the depth image puts the counter or the box row more than 1.5 cm out of place, either
-  the camera moved or the thing itself did. The simulator only ever moves the camera, so with a stiff arm (the
-  simulator's) the brain corrects the camera. With a sagging arm it assumes the real robot: it moves the counter, and
-  for the boxes it goes by the size of the shift and switches after two empty grasps. Those branches have never run
-  in the simulator.
+  the camera moved or the thing itself did. The simulator only ever moves the camera, so with an arm that holds its
+  position the brain corrects the camera. With the organisers' feed-forward on, the real robot takes that same
+  branch. Only with a sagging arm does it assume the counter moved, go by the size of the shift for the boxes and
+  switch after two empty grasps. That branch has never run in the simulator.
 - Time. Half the episodes finish within 59 seconds. 5 of 112 ran out of the 120 seconds, and the real robot may be slower, so expect a block left behind in some real episodes.
 
 ## Run it

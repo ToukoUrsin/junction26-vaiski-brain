@@ -501,6 +501,13 @@ class VaiskiPolicy(ClassicalPolicy):
         ref, cmax = float(ad.get("sag_ref", 0.0032)), float(ad.get("sag_cmax", 0.02))
         w = float(np.clip((c - on) / max(full - on, 1e-9), 0.0, 1.0))   # fades in: no jump at the threshold
         new = w * (min(c, cmax) - ref)
+        # An arm that sags LESS than the sim's (the real runner sends gravity feed-forward since 15.11.: compliance
+        # ~0) ends ABOVE where the grasp was tuned (sim: 3.2 mrad/Nm x 4-9 Nm = 0.5-1.5 cm at the hand). The same
+        # rule, other sign: command it (c - sag_ref) * tau_gravity lower. Fades in below sag_low_on; the sim's own
+        # arm (3.1-3.9 mrad/Nm) never gets there.
+        lo_on, lo_full = float(ad.get("sag_low_on", 0.0)), float(ad.get("sag_low_full", 0.0))
+        if lo_on > lo_full and c < lo_on:
+            new = float(np.clip((lo_on - c) / (lo_on - lo_full), 0.0, 1.0)) * (max(c, -cmax) - ref)
         if len(self._sag_meas) == 1 or abs(new - self.planner.sag_c) > 1e-3:
             self.log(f"[vaiski] arm sag: joint compliance {1e3 * c:.1f} mrad/Nm at rest (sim 3.1, real PD 12.5) -> "
                      + (f"compensating {1e3 * new:.1f} mrad/Nm" if new else "no compensation"))
