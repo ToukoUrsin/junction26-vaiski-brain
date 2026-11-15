@@ -83,8 +83,9 @@ What we don't know:
   measured joints at every look and corrects both ways: higher for a softer arm, and since v13 lower for a stiffer
   one (`sag_low_on` in `config.yaml`). The softer case has only run in our mock world. For the stiffer case we
   switched gravity off for the robot in the simulator, which is what perfect compensation looks like. On the fixed
-  task, seeds 400 to 405, v12 closed on air 6 times and sorted 26 of 27 blocks. v13 never closed on air and sorted 27
-  of 27. Six episodes is a small sample, and the real arm is not the simulator's.
+  task, seeds 400 to 407, v12 sorted 34 of 35 blocks and v13 33 of 35. Each had one episode where it kept missing
+  the same block. So there the rule makes no difference we can measure. It is in because it puts the hand where the
+  simulator's hand was when we tuned the grip, and the real arm is not the simulator's.
 - Camera, counter or boxes. When the depth image puts the counter or the box row more than 1.5 cm out of place, either
   the camera moved or the thing itself did. The simulator only ever moves the camera, so with an arm that holds its
   position the brain corrects the camera. With the organisers' feed-forward on, the real robot takes that same
