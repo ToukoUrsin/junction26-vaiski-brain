@@ -4,6 +4,10 @@ Starter code for the **Aaltonomous Humanoid** challenge: make Väiski, a Unitree
 coloured objects into bins fully autonomously. Develop in sim, hand in a Docker policy server, the best teams run on
 the real robot in the finals.
 
+> **This copy is a team entry: [A brain for Väiski](aaltonomous/vaiski/README.md).** Our code is in
+> `aaltonomous/vaiski/`; that README says what is ours, what is the organisers', what we measured and how to
+> check it. Everything below is the organisers' original README.
+
 | Start here | |
 |---|---|
 | [Challenge brief](aaltonomous/docs/participants/README.md) | Task, rungs, timeline, what to read next |

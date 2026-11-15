@@ -1,0 +1,33 @@
+# Harsh variant 3 (helper "heldout"): much brighter (washed-out tops, clipping), coloured light, vivid or pale
+# hue-shifted objects, other mat / counter / box colours, camera pose off by 2 cm / 2 deg, any yaw, 3 cm pose jitter.
+# Physics (mass, friction) as train.
+name: hard_bright
+lighting:
+  key_intensity_scale: [1.6, 2.6]
+  key_pos_jitter: [0.8, 0.8, 0.5]
+  key_rgb_jitter: 0.30
+  dome_intensity_scale: [1.5, 2.6]
+  dome_rgb_jitter: 0.30
+textures:
+  mat_scale: [1.0, 1.4]
+  mat_rgb_jitter: 0.30
+  mat_bias: [0.0, 0.08]
+  counter_rgb_jitter: 0.5
+  bin_rgb_jitter: 0.25
+objects:
+  hue_jitter: 0.06
+  sat_scale: [0.55, 1.3]
+  val_scale: [0.9, 1.4]
+  mass_scale: [0.7, 1.5]
+  friction_scale: [0.75, 1.1]
+pose:
+  xy_jitter: 0.03
+  yaw_jitter_deg: 180
+camera:
+  rgb_noise_std: 8.0
+  rgb_gain: [1.1, 1.3]
+  depth_noise_mm: 2.0
+  depth_noise_rel: 0.004
+  depth_hole_frac: 0.03
+  pose_jitter_m: 0.02
+  pose_jitter_deg: 2.0

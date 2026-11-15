@@ -1,0 +1,31 @@
+# Harsh variant 1 (helper "heldout"): every train.yaml range doubled (width x2 around the same centre).
+name: hard_double
+lighting:
+  key_intensity_scale: [0.2, 1.8]
+  key_pos_jitter: [0.8, 0.8, 0.6]
+  key_rgb_jitter: 0.16
+  dome_intensity_scale: [0.1, 2.0]
+  dome_rgb_jitter: 0.10
+textures:
+  mat_scale: [0.62, 1.32]
+  mat_rgb_jitter: 0.12
+  mat_bias: [-0.06, 0.06]
+  counter_rgb_jitter: 0.4
+  bin_rgb_jitter: 0.16
+objects:
+  hue_jitter: 0.04
+  sat_scale: [0.62, 1.32]
+  val_scale: [0.62, 1.32]
+  mass_scale: [0.3, 1.9]
+  friction_scale: [0.58, 1.28]
+pose:
+  xy_jitter: 0.010
+  yaw_jitter_deg: 10
+camera:
+  rgb_noise_std: 6.0
+  rgb_gain: [0.8, 1.2]
+  depth_noise_mm: 2.0
+  depth_noise_rel: 0.004
+  depth_hole_frac: 0.02
+  pose_jitter_m: 0.02
+  pose_jitter_deg: 2.0

@@ -104,6 +104,15 @@ class Planner:
         self.dt = dt
         self.height = float(cfg["perception"].get("object_height") or scene.object_height())
         self.mapping = mapping or dict(FIXED_MAPPING)  # sort_fixed: fixed colour -> bin position
+        # Gravity sag: a joint PD without gravity feed-forward (the real runner: kp 80, tau_ff 0) settles
+        # tau_gravity / kp below its command. `sag_c` = joint compliance to cancel (rad/Nm), set by the policy from
+        # the MEASURED tracking error at rest; 0 = off (commands = planned joints, as before).
+        self.sag_c, self.sag_max = 0.0, 0.07
+        self.deadline = None   # self.clock() after which a plan search stops trying alternatives (set by the brain)
+        self.cancel = False    # True = stop any running search now (a new episode is starting)
+        self.late_hit = False  # a search was cut short by `deadline` / `cancel`
+        self.via_on = False    # free joint-space moves may detour over a raised midpoint (see _transit)
+        self._via_wanted = set()
 
     # ------------------------------------------------------------------ geometry helpers
     def bin_xy(self, name):
@@ -203,6 +212,8 @@ class Planner:
         if ok and not low(q_from, q_to):
             return [q_to]
         for dz in (0.06, 0.12):
+            if self._late():    # search budget spent (never the case without a deadline)
+                break
             mid = 0.5 * (np.asarray(p_from, float) + p_to) + [0, 0, dz]
             q_mid, ok1 = self._ik(side, mid, q_from, name + "_mid", plan)
             if not ok1 or low(q_from, q_mid):
@@ -214,6 +225,40 @@ class Planner:
         plan.ik[name] = (False, 0.0, 0.0)
         plan.reason = f"{name}: no joint-space path above the bin rim"
         return None
+
+    def _transit(self, side, q_from, q_to, hands, name, plan):
+        """Free joint-space move q_from -> q_to (home -> pregrasp, retreat -> home). The straight joint path is kept
+        when the hand stays clear of the counter and the bin rims on it. When it dips (far cross-body reaches: "hand
+        1.3 cm above counter during to_pregrasp"; every put-down on the counter: "... during home") the move may go
+        over a raised midpoint, but only as a last resort (self.via_on): `plan` first searches both arms without it,
+        so every object that had a plan keeps exactly that plan; a relocation always may (none ever passed without:
+        0 of 50 in the sim logs)."""
+        need = float(self.cfg["motion"]["counter_clearance"])
+
+        def dips(qa, qb):
+            for f in np.linspace(0.0, 1.0, 13):
+                q = qa + f * (qb - qa)
+                for h in hands:
+                    if self.clearance(side, q, h) < need - 2e-3 or self.bin_clearance(side, q, h) < 0.003:
+                        return True
+            return False
+
+        if not self.cfg["motion"].get("transit_via", True) or not dips(q_from, q_to):
+            return [q_to]
+        if not self.via_on:         # first pass: plans as they always were; remember that a detour could help here
+            self._via_wanted.add(side)
+            return [q_to]
+        q_m = 0.5 * (q_from + q_to)
+        p_m = np.asarray(self.kin.grasp_pose(side, q_m)[0], float)
+        for dz in (0.05, 0.10, 0.15):
+            if self._late():
+                break
+            q_mid, ok = self._ik(side, p_m + [0.0, 0.0, dz], q_m, name + "_via", plan)
+            if ok and not dips(q_from, q_mid) and not dips(q_mid, q_to):
+                return [q_mid, q_to]
+        plan.ik.pop(name + "_via", None)
+        plan.waypoints.pop(name + "_via", None)
+        return [q_to]               # no better path found: the trajectory check below decides, as before
 
     # ------------------------------------------------------------------ main
     def plan(self, det, arm_q, hand_q, bin_name=None, obstacles=(), relocate=True):
@@ -232,7 +277,9 @@ class Planner:
         if bin_name is None:
             return last
         reasons, good = [], []
-        for side in (side0, "right" if side0 == "left" else "left"):
+        self._via_wanted = set()
+        sides = (side0, "right" if side0 == "left" else "left")
+        for side in sides:
             p = self._plan_side_hints(det, side, bin_name, np.asarray(arm_q, float), np.asarray(hand_q, float))
             if p.ok:
                 if g.get("arm", "best") != "best":
@@ -241,8 +288,21 @@ class Planner:
             else:
                 reasons.append(f"{side}: {p.reason}")
                 last = p
+                if self._late():
+                    break
         if good:
             return min(good, key=lambda p: p.duration)
+        # no arm has a plan: the ones that failed only on the way to the pregrasp / back home get a detour
+        for side in [s_ for s_ in sides if s_ in self._via_wanted]:
+            if self._late():
+                break
+            self.via_on = True
+            try:
+                p = self._plan_side_hints(det, side, bin_name, np.asarray(arm_q, float), np.asarray(hand_q, float))
+            finally:
+                self.via_on = False
+            if p.ok:
+                return p
         last.reason = "; ".join(reasons)
         if relocate and g.get("relocate", {}).get("enabled", True):
             r = self.plan_relocation(det, bin_name, np.asarray(arm_q, float), np.asarray(hand_q, float), obstacles)
@@ -268,13 +328,36 @@ class Planner:
         keep.sort(key=lambda p: np.linalg.norm(p - b))
         return keep[: int(rc.get("max_spots", 6))]
 
+    @staticmethod
+    def clock():
+        """CPU seconds of the calling thread: a search budget must not shrink because the machine is busy."""
+        import time
+        return time.thread_time()
+
+    def _late(self):
+        if self.cancel or (self.deadline is not None and self.clock() > self.deadline):
+            self.late_hit = True
+            return True
+        return False
+
     def plan_relocation(self, det, bin_name, arm_q, hand_q, obstacles=()):
         """Cross-body fallback: pick `det` with an arm that reaches it and put it down at a counter spot from which
         some arm has a full plan to `bin_name` (checked from home). Returns a Plan with target_bin 'counter'."""
         from dataclasses import replace
+        was, self.via_on = self.via_on, True
+        try:
+            return self._plan_relocation(det, bin_name, arm_q, hand_q, obstacles)
+        finally:
+            self.via_on = was
+
+    def _plan_relocation(self, det, bin_name, arm_q, hand_q, obstacles=()):
+        from dataclasses import replace
         last = Plan(False, color=det.color, reason="no relocation spot")
         H = self.height
         for spot in self.relocation_spots(det, bin_name, obstacles):
+            if self._late():
+                last.reason = "relocation search out of time (" + last.reason + ")"
+                break
             d2 = replace(det, top=np.r_[spot, self.scene.counter_z + H])
             by = self.bin_xy(bin_name)[1]
             fin_side = "left" if (by if abs(by) > 0.1 else spot[1]) > 0 else "right"
@@ -303,6 +386,8 @@ class Planner:
                 if p.ok:
                     return p
                 first = first or p
+                if self._late():      # no deadline set (the default) = every alternative is tried, as before
+                    break
             return first
         finally:
             self.kin.hint = saved
@@ -367,9 +452,10 @@ class Planner:
         arm_parts, hand_parts, phases = [], [], []
         cur_a, cur_h = arm_q.copy(), hand_q.copy()
 
-        def move(name, Qs, hand_to=None):
+        def move(name, Qs, hand_to=None, slow=1.0):
             nonlocal cur_a, cur_h
-            a = time_scale([cur_a] + list(Qs), vmax, amax, self.dt)
+            Qs = [self._sag_cmd(q, sl) for q in Qs]  # no-op unless the policy measured a soft (sagging) arm
+            a = time_scale([cur_a] + list(Qs), vmax * slow, amax * slow, self.dt)
             h = np.repeat(cur_h[None], len(a), 0)
             if hand_to is not None:  # hand moves during the arm move (ends no later than the arm)
                 hr = ramp(cur_h, hand_to, hv, self.dt)
@@ -381,10 +467,12 @@ class Planner:
                 cur_h = np.asarray(hand_to, float).copy()
             add(name, a, h)
 
-        def hand(name, to, hold_s):
+        def hand(name, to, hold_s, wait_s=0.0):
             nonlocal cur_h
             h = ramp(cur_h, to, hv, self.dt)
-            h = np.vstack([h, np.repeat(np.asarray(to, float)[None], int(round(hold_s / self.dt)), 0)])
+            # wait_s: stand still first (the arm has just stopped: a soft PD arm lags and rings for a moment)
+            h = np.vstack([np.repeat(cur_h[None], int(round(wait_s / self.dt)), 0), h,
+                           np.repeat(np.asarray(to, float)[None], int(round(hold_s / self.dt)), 0)])
             cur_h = np.asarray(to, float).copy()
             add(name, np.repeat(cur_a[None], len(h), 0), h)
 
@@ -396,14 +484,17 @@ class Planner:
                 phases.append((name, start, start + len(a)))
                 cur_a = a[-1].copy()
 
-        move("to_pregrasp", [q_pre], hand_to=hand_pre)
-        move("descend", down)
-        hand("close", hand_cls, mo["close_hold_s"])
+        move("to_pregrasp", self._transit(side, arm_q.copy(), q_pre, (hand_q, hand_pre), "to_pregrasp", plan),
+             hand_to=hand_pre)
+        # the last 8 cm onto the object: a real arm (kp 80, kd 3, no gravity feed-forward) rings after a hard stop,
+        # and the fingers close right after this one. Gentler here costs ~0.3 s per pick
+        move("descend", down, slow=float(mo.get("descend_scale", 1.0)))
+        hand("close", hand_cls, mo["close_hold_s"], float(mo.get("pre_close_s", 0.0)))
         move("lift", up)
         move("carry", carry + lower)
         hand("open", hand_rel, mo["open_hold_s"])  # widest posture: `open` alone left the cube wedged in the sim
         move("retreat", retreat)
-        move("home", [home], hand_to=hand_open)
+        move("home", self._transit(side, cur_a.copy(), home, (hand_rel, hand_open), "home", plan), hand_to=hand_open)
         plan.arm, plan.hand, plan.phases = np.vstack(arm_parts), np.vstack(hand_parts), phases
 
         # clearance over the whole trajectory (grasp phases use the fingertip margin)
@@ -418,7 +509,7 @@ class Planner:
         for k in range(0, len(plan.arm), 3):
             # closing: the thumb swings through its lowest point; touching the mat lightly is acceptable
             need = 0.003 if closing[k] else g["fingertip_clearance"] if grasp_ticks[k] else mo["counter_clearance"]
-            c = self.clearance(side, plan.arm[k], plan.hand[k])
+            c = self.clearance(side, self._sag_act(plan.arm[k], sl), plan.hand[k])
             if c < need - 2e-3:
                 name = next(n for n, s, e in phases if s <= k < e)
                 # the object itself sits between the fingers during descend/lift; only the counter matters here
@@ -430,7 +521,7 @@ class Planner:
         for k in range(0, len(plan.arm), 3):
             if drop[k]:
                 continue
-            c = self.bin_clearance(side, plan.arm[k], plan.hand[k])
+            c = self.bin_clearance(side, self._sag_act(plan.arm[k], sl), plan.hand[k])
             if c < 0.003:
                 name = next(n for n, s_, e in phases if s_ <= k < e)
                 plan.reason = f"hand {100 * c:.1f} cm above a bin rim during {name}"
@@ -441,6 +532,32 @@ class Planner:
             return plan
         plan.ok = True
         return plan
+
+    SAG_JOINTS = np.array([0, 1, 2, 3, 7, 8, 9, 10])  # shoulder pitch/roll/yaw + elbow of both arms (same PD gain)
+
+    def sag_delta(self, q):
+        """Joint offset (14,) that cancels the extra gravity sag at arm configuration q."""
+        d = np.zeros(14)
+        if self.sag_c:
+            j = self.SAG_JOINTS
+            d[j] = np.clip(self.sag_c * self.kin.gravity(q)[j], -self.sag_max, self.sag_max)
+        return d
+
+    def _sag_cmd(self, q, sl):
+        """Planned (intended) joints -> command for the arm in slice `sl`; the other arm keeps its command."""
+        if not self.sag_c:
+            return q
+        q = np.array(q, float)
+        q[sl] = np.clip(q[sl] + self.sag_delta(q)[sl], self.kin.lo[sl], self.kin.hi[sl])
+        return q
+
+    def _sag_act(self, q, sl):
+        """Command -> where the arm in slice `sl` is expected to settle (inverse of _sag_cmd, first order)."""
+        if not self.sag_c:
+            return q
+        q = np.array(q, float)
+        q[sl] -= self.sag_delta(q)[sl]
+        return q
 
     def dry_run_safety(self, arm_q, hand_q, arm, hand):
         f = SafetyFilter(self.spec, self.safety)

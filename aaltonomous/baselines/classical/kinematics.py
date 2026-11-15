@@ -85,6 +85,15 @@ class ArmKinematics:
         self.pin.framesForwardKinematics(self.model, self.data, q)
         return q
 
+    def gravity(self, arm_q):
+        """Gravity torque (Nm) on the 14 arm joints at arm_q: URDF masses, pelvis upright, fingers at zero.
+        Own pin.Data, so it never disturbs the FK results another caller is reading."""
+        if getattr(self, "_gdata", None) is None:
+            self._gdata = self.model.createData()
+        q = self.q0.copy()
+        q[self.arm_iq] = arm_q
+        return np.array(self.pin.computeGeneralizedGravity(self.model, self._gdata, q))[self.arm_iv]
+
     def grasp_pose(self, side, arm_q):
         """(grasp point position (3,), approach axis (3,)) in the pelvis frame for the full arm_q (14,)."""
         self._fk(arm_q)
